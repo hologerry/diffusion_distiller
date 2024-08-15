@@ -1,12 +1,15 @@
 # copied from https://github.com/rosinality/denoising-diffusion-pytorch
 
 import math
+
 from typing import List
 
 import torch
-from pydantic import StrictInt, StrictFloat, StrictBool
+
+from pydantic import StrictBool, StrictFloat, StrictInt
 from torch import nn
 from torch.nn import functional as F
+
 
 swish = F.silu
 
@@ -36,18 +39,16 @@ def variance_scaling_init_(tensor, scale=1, mode="fan_avg", distribution="unifor
 
 
 def conv2d(
-        in_channel,
-        out_channel,
-        kernel_size,
-        stride=1,
-        padding=0,
-        bias=True,
-        scale=1,
-        mode="fan_avg",
+    in_channel,
+    out_channel,
+    kernel_size,
+    stride=1,
+    padding=0,
+    bias=True,
+    scale=1,
+    mode="fan_avg",
 ):
-    conv = nn.Conv2d(
-        in_channel, out_channel, kernel_size, stride=stride, padding=padding, bias=bias
-    )
+    conv = nn.Conv2d(in_channel, out_channel, kernel_size, stride=stride, padding=padding, bias=bias)
 
     variance_scaling_init_(conv.weight, scale, mode=mode)
 
@@ -93,7 +94,13 @@ class Downsample(nn.Sequential):
 
 class ResBlock(nn.Module):
     def __init__(
-            self, in_channel, out_channel, time_dim, use_affine_time=False, dropout=0, group_norm=32,
+        self,
+        in_channel,
+        out_channel,
+        time_dim,
+        use_affine_time=False,
+        dropout=0,
+        group_norm=32,
     ):
         super().__init__()
 
@@ -111,9 +118,7 @@ class ResBlock(nn.Module):
         self.activation1 = Swish()
         self.conv1 = conv2d(in_channel, out_channel, 3, padding=1)
 
-        self.time = nn.Sequential(
-            Swish(), linear(time_dim, time_out_dim, scale=time_scale)
-        )
+        self.time = nn.Sequential(Swish(), linear(time_dim, time_out_dim, scale=time_scale))
 
         self.norm2 = nn.GroupNorm(group_norm, out_channel, affine=norm_affine)
         self.activation2 = Swish()
@@ -166,9 +171,7 @@ class SelfAttention(nn.Module):
         qkv = self.qkv(norm).view(batch, n_head, head_dim * 3, height, width)
         query, key, value = qkv.chunk(3, dim=2)  # bhdyx
 
-        attn = torch.einsum(
-            "bnchw, bncyx -> bnhwyx", query, key
-        ).contiguous() / math.sqrt(channel)
+        attn = torch.einsum("bnchw, bncyx -> bnhwyx", query, key).contiguous() / math.sqrt(channel)
         attn = attn.view(batch, n_head, height, width, -1)
         attn = torch.softmax(attn, -1)
         attn = attn.view(batch, n_head, height, width, height, width)
@@ -185,9 +188,7 @@ class TimeEmbedding(nn.Module):
 
         self.dim = dim
 
-        inv_freq = torch.exp(
-            torch.arange(0, dim, 2, dtype=torch.float32) * (-math.log(10000) / dim)
-        )
+        inv_freq = torch.exp(torch.arange(0, dim, 2, dtype=torch.float32) * (-math.log(10000) / dim))
 
         self.register_buffer("inv_freq", inv_freq)
 
@@ -202,21 +203,19 @@ class TimeEmbedding(nn.Module):
 
 class ResBlockWithAttention(nn.Module):
     def __init__(
-            self,
-            in_channel,
-            out_channel,
-            time_dim,
-            dropout,
-            use_attention=False,
-            attention_head=1,
-            use_affine_time=False,
-            group_norm=32,
+        self,
+        in_channel,
+        out_channel,
+        time_dim,
+        dropout,
+        use_attention=False,
+        attention_head=1,
+        use_affine_time=False,
+        group_norm=32,
     ):
         super().__init__()
 
-        self.resblocks = ResBlock(
-            in_channel, out_channel, time_dim, use_affine_time, dropout, group_norm=group_norm
-        )
+        self.resblocks = ResBlock(in_channel, out_channel, time_dim, use_affine_time, dropout, group_norm=group_norm)
 
         if use_attention:
             self.attention = SelfAttention(out_channel, n_head=attention_head, group_norm=group_norm)
@@ -243,8 +242,8 @@ def spatial_fold(input, fold):
 
     return (
         input.view(batch, channel, h_fold, fold, w_fold, fold)
-            .permute(0, 1, 3, 5, 2, 4)
-            .reshape(batch, -1, h_fold, w_fold)
+        .permute(0, 1, 3, 5, 2, 4)
+        .reshape(batch, -1, h_fold, w_fold)
     )
 
 
@@ -258,23 +257,23 @@ def spatial_unfold(input, unfold):
 
     return (
         input.view(batch, -1, unfold, unfold, height, width)
-            .permute(0, 1, 4, 2, 5, 3)
-            .reshape(batch, -1, h_unfold, w_unfold)
+        .permute(0, 1, 4, 2, 5, 3)
+        .reshape(batch, -1, h_unfold, w_unfold)
     )
 
 
 class UNet(nn.Module):
     def __init__(
-            self,
-            in_channel: StrictInt,
-            channel: StrictInt,
-            channel_multiplier: List[StrictInt],
-            n_res_blocks: StrictInt,
-            attn_strides: List[StrictInt],
-            attn_heads: StrictInt = 1,
-            use_affine_time: StrictBool = False,
-            dropout: StrictFloat = 0,
-            fold: StrictInt = 1,
+        self,
+        in_channel: StrictInt,
+        channel: StrictInt,
+        channel_multiplier: List[StrictInt],
+        n_res_blocks: StrictInt,
+        attn_strides: List[StrictInt],
+        attn_heads: StrictInt = 1,
+        use_affine_time: StrictBool = False,
+        dropout: StrictFloat = 0,
+        fold: StrictInt = 1,
     ):
         super().__init__()
 
@@ -292,7 +291,7 @@ class UNet(nn.Module):
             linear(time_dim, time_dim),
         )
 
-        down_layers = [conv2d(in_channel * (fold ** 2), channel, 3, padding=1)]
+        down_layers = [conv2d(in_channel * (fold**2), channel, 3, padding=1)]
         feat_channels = [channel]
         in_channel = channel
         for i in range(n_block):
@@ -305,10 +304,10 @@ class UNet(nn.Module):
                         channel_mult,
                         time_dim,
                         dropout,
-                        use_attention=2 ** i in attn_strides,
+                        use_attention=2**i in attn_strides,
                         attention_head=attn_heads,
                         use_affine_time=use_affine_time,
-                        group_norm=group_norm
+                        group_norm=group_norm,
                     )
                 )
 
@@ -331,7 +330,7 @@ class UNet(nn.Module):
                     use_attention=True,
                     attention_head=attn_heads,
                     use_affine_time=use_affine_time,
-                    group_norm=group_norm
+                    group_norm=group_norm,
                 ),
                 ResBlockWithAttention(
                     in_channel,
@@ -339,7 +338,7 @@ class UNet(nn.Module):
                     time_dim,
                     dropout=dropout,
                     use_affine_time=use_affine_time,
-                    group_norm=group_norm
+                    group_norm=group_norm,
                 ),
             ]
         )
@@ -355,10 +354,10 @@ class UNet(nn.Module):
                         channel_mult,
                         time_dim,
                         dropout=dropout,
-                        use_attention=2 ** i in attn_strides,
+                        use_attention=2**i in attn_strides,
                         attention_head=attn_heads,
                         use_affine_time=use_affine_time,
-                        group_norm=group_norm
+                        group_norm=group_norm,
                     )
                 )
 
@@ -372,7 +371,7 @@ class UNet(nn.Module):
         self.out = nn.Sequential(
             nn.GroupNorm(group_norm, in_channel),
             Swish(),
-            conv2d(in_channel, 3 * (fold ** 2), 3, padding=1, scale=1e-10),
+            conv2d(in_channel, 3 * (fold**2), 3, padding=1, scale=1e-10),
         )
 
     def forward(self, input, time):

@@ -9,13 +9,9 @@ def make_diffusion(model, n_timestep, time_scale, device):
     return GaussianDiffusion(model, betas, time_scale=time_scale)
 
 
-def make_beta_schedule(
-        schedule, n_timestep, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3
-):
+def make_beta_schedule(schedule, n_timestep, linear_start=1e-4, linear_end=2e-2, cosine_s=8e-3):
     if schedule == "cosine":
-        timesteps = (
-                torch.arange(n_timestep + 1, dtype=torch.float64) / n_timestep + cosine_s
-        )
+        timesteps = torch.arange(n_timestep + 1, dtype=torch.float64) / n_timestep + cosine_s
         alphas = timesteps / (1 + cosine_s) * math.pi / 2
         alphas = torch.cos(alphas).pow(2)
         alphas = alphas / alphas[0]
@@ -64,7 +60,7 @@ class GaussianDiffusion:
         self.sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
         self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1 - alphas_cumprod)
         self.posterior_log_variance_clipped = torch.log(posterior_variance.clamp(min=1e-20))
-        self.posterior_mean_coef1 = (betas * torch.sqrt(alphas_cumprod_prev) / (1 - alphas_cumprod))
+        self.posterior_mean_coef1 = betas * torch.sqrt(alphas_cumprod_prev) / (1 - alphas_cumprod)
         self.posterior_mean_coef2 = (1 - alphas_cumprod_prev) * torch.sqrt(alphas) / (1 - alphas_cumprod)
 
         if sampler == "ddpm":
@@ -85,8 +81,7 @@ class GaussianDiffusion:
         return F.mse_loss(v_recon, v.float())
 
     def q_posterior(self, x_0, x_t, t):
-        mean = E_(self.posterior_mean_coef1, t, x_t.shape) * x_0 \
-               + E_(self.posterior_mean_coef2, t, x_t.shape) * x_t
+        mean = E_(self.posterior_mean_coef1, t, x_t.shape) * x_0 + E_(self.posterior_mean_coef2, t, x_t.shape) * x_t
         var = E_(self.posterior_variance, t, x_t.shape)
         log_var_clipped = E_(self.posterior_log_variance_clipped, t, x_t.shape)
         return mean, var, log_var_clipped
@@ -112,21 +107,20 @@ class GaussianDiffusion:
         alpha, sigma = self.get_alpha_sigma(x, t)
         # if clip_denoised:
         #     x = x.clip(-1, 1)
-        pred = (x * alpha - v * sigma)
+        pred = x * alpha - v * sigma
         if clip_denoised:
             pred = pred.clip(-clip_value, clip_value)
         eps = (x - alpha * pred) / sigma
         if clip_denoised:
             eps = eps.clip(-clip_value, clip_value)
 
-        t_mask = (t > 0)
+        t_mask = t > 0
         if t_mask.any().item():
             if not t_mask.all().item():
                 raise Exception()
             alpha_, sigma_ = self.get_alpha_sigma(x, (t - 1).clip(min=0))
-            ddim_sigma = eta * (sigma_ ** 2 / sigma ** 2).sqrt() * \
-                         (1 - alpha ** 2 / alpha_ ** 2).sqrt()
-            adjusted_sigma = (sigma_ ** 2 - ddim_sigma ** 2).sqrt()
+            ddim_sigma = eta * (sigma_**2 / sigma**2).sqrt() * (1 - alpha**2 / alpha_**2).sqrt()
+            adjusted_sigma = (sigma_**2 - ddim_sigma**2).sqrt()
             pred = pred * alpha_ + eps * adjusted_sigma
             if eta:
                 pred += torch.randn_like(pred) * ddim_sigma
@@ -161,7 +155,15 @@ class GaussianDiffusionDefault(GaussianDiffusion):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def distill_loss(self, student_diffusion, x, t, extra_args, eps=None, student_device=None):
+    def distill_loss(
+        self,
+        student_diffusion: GaussianDiffusion,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        extra_args: dict,
+        eps=None,
+        student_device=None,
+    ):
         if eps is None:
             eps = torch.randn_like(x)
         with torch.no_grad():

@@ -2,16 +2,26 @@
 # coding: utf-8
 import argparse
 import importlib
-from v_diffusion import make_beta_schedule
-from moving_average import init_ema_model
+
 from torch.utils.tensorboard import SummaryWriter
+
+from moving_average import init_ema_model
 from train_utils import *
+from v_diffusion import make_beta_schedule
+
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--module", help="Model module.", type=str, required=True)
-    parser.add_argument("--name", help="Experiment name. Data will be saved to ./checkpoints/<name>/<dname>/.", type=str, required=True)
-    parser.add_argument("--dname", help="Distillation name. Data will be saved to ./checkpoints/<name>/<dname>/.", type=str, required=True)
+    parser.add_argument(
+        "--name", help="Experiment name. Data will be saved to ./checkpoints/<name>/<dname>/.", type=str, required=True
+    )
+    parser.add_argument(
+        "--dname",
+        help="Distillation name. Data will be saved to ./checkpoints/<name>/<dname>/.",
+        type=str,
+        required=True,
+    )
     parser.add_argument("--checkpoint_to_continue", help="Path to checkpoint.", type=str, default="")
     parser.add_argument("--num_timesteps", help="Num diffusion steps.", type=int, default=1024)
     parser.add_argument("--num_iters", help="Num iterations.", type=int, default=100000)
@@ -30,7 +40,7 @@ def train_model(args, make_model, make_dataset):
         args.num_workers = args.batch_size * 2
 
     # print(args)
-    print(' '.join(f'{k}={v}' for k, v in vars(args).items()))
+    print(" ".join(f"{k}={v}" for k, v in vars(args).items()))
 
     device = torch.device("cuda")
     train_dataset = test_dataset = InfinityDataset(make_dataset(), args.num_iters)
@@ -39,8 +49,12 @@ def train_model(args, make_model, make_dataset):
 
     img, anno = train_dataset[0]
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers
+    )
 
     teacher_ema = make_model().to(device)
 
@@ -81,10 +95,22 @@ def train_model(args, make_model, make_dataset):
 
     image_size = teacher.image_size
 
-    on_iter = make_iter_callback(teacher_ema_diffusion, device, checkpoints_dir, image_size, tensorboard, args.log_interval, args.ckpt_interval, False)
+    on_iter = make_iter_callback(
+        teacher_ema_diffusion,
+        device,
+        checkpoints_dir,
+        image_size,
+        tensorboard,
+        args.log_interval,
+        args.ckpt_interval,
+        False,
+    )
     diffusion_train = DiffusionTrain(scheduler)
-    diffusion_train.train(train_loader, teacher_diffusion, teacher_ema, args.lr, device, make_extra_args=make_condition, on_iter=on_iter)
+    diffusion_train.train(
+        train_loader, teacher_diffusion, teacher_ema, args.lr, device, make_extra_args=make_condition, on_iter=on_iter
+    )
     print("Finished.")
+
 
 if __name__ == "__main__":
     parser = make_argument_parser()

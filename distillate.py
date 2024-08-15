@@ -2,16 +2,26 @@
 # coding: utf-8
 import argparse
 import importlib
-from v_diffusion import make_beta_schedule
-from train_utils import *
-from moving_average import init_ema_model
+
 from torch.utils.tensorboard import SummaryWriter
+
+from moving_average import init_ema_model
+from train_utils import *
+from v_diffusion import make_beta_schedule
+
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--module", help="Model module.", type=str, required=True)
-    parser.add_argument("--name", help="Experiment name. Data will be saved to ./checkpoints/<name>/<dname>/.", type=str, required=True)
-    parser.add_argument("--dname", help="Distillation name. Data will be saved to ./checkpoints/<name>/<dname>/.", type=str, required=True)
+    parser.add_argument(
+        "--name", help="Experiment name. Data will be saved to ./checkpoints/<name>/<dname>/.", type=str, required=True
+    )
+    parser.add_argument(
+        "--dname",
+        help="Distillation name. Data will be saved to ./checkpoints/<name>/<dname>/.",
+        type=str,
+        required=True,
+    )
     parser.add_argument("--base_checkpoint", help="Path to base checkpoint.", type=str, required=True)
     parser.add_argument("--gamma", help="Gamma factor for SNR weights.", type=float, default=0)
     parser.add_argument("--checkpoint_to_continue", help="Path to checkpoint.", type=str, default="")
@@ -25,6 +35,7 @@ def make_argument_parser():
     parser.add_argument("--num_workers", type=int, default=-1)
     return parser
 
+
 def distill_model(args, make_model, make_dataset):
     if args.num_workers == -1:
         args.num_workers = args.batch_size * 2
@@ -34,7 +45,7 @@ def distill_model(args, make_model, make_dataset):
         need_student_ema = False
 
     # print(args)
-    print(' '.join(f'{k}={v}' for k, v in vars(args).items()))
+    print(" ".join(f"{k}={v}" for k, v in vars(args).items()))
 
     device = torch.device("cuda")
     train_dataset = test_dataset = InfinityDataset(make_dataset(), args.num_iters)
@@ -98,12 +109,34 @@ def distill_model(args, make_model, make_dataset):
         print("Teacher parameters copied.")
     else:
         print("Continue training...")
-    student_diffusion = make_diffusion(student, teacher_ema_diffusion.num_timesteps // 2, teacher_ema_diffusion.time_scale * 2, device)
+    student_diffusion = make_diffusion(
+        student, teacher_ema_diffusion.num_timesteps // 2, teacher_ema_diffusion.time_scale * 2, device
+    )
     if need_student_ema:
-        student_ema_diffusion = make_diffusion(student_ema, teacher_ema_diffusion.num_timesteps // 2, teacher_ema_diffusion.time_scale * 2, device)
+        student_ema_diffusion = make_diffusion(
+            student_ema, teacher_ema_diffusion.num_timesteps // 2, teacher_ema_diffusion.time_scale * 2, device
+        )
 
-    on_iter = make_iter_callback(student_ema_diffusion, device, checkpoints_dir, image_size, tensorboard, args.log_interval, args.ckpt_interval, False)
-    distillation_model.train_student(distill_train_loader, teacher_ema_diffusion, student_diffusion, student_ema, args.lr, device, make_extra_args=make_condition, on_iter=on_iter)
+    on_iter = make_iter_callback(
+        student_ema_diffusion,
+        device,
+        checkpoints_dir,
+        image_size,
+        tensorboard,
+        args.log_interval,
+        args.ckpt_interval,
+        False,
+    )
+    distillation_model.train_student(
+        distill_train_loader,
+        teacher_ema_diffusion,
+        student_diffusion,
+        student_ema,
+        args.lr,
+        device,
+        make_extra_args=make_condition,
+        on_iter=on_iter,
+    )
     print("Finished.")
 
 

@@ -1,13 +1,18 @@
 import argparse
 import importlib
-from v_diffusion import make_beta_schedule
-from moving_average import init_ema_model
-from torch.utils.tensorboard import SummaryWriter
-from copy import deepcopy
-import torch
 import os
-from train_utils import make_visualization
+
+from copy import deepcopy
+
 import cv2
+import torch
+
+from torch.utils.tensorboard import SummaryWriter
+
+from moving_average import init_ema_model
+from train_utils import make_visualization
+from v_diffusion import make_beta_schedule
+
 
 def make_argument_parser():
     parser = argparse.ArgumentParser()
@@ -19,8 +24,14 @@ def make_argument_parser():
     parser.add_argument("--time_scale", help="Diffusion time scale.", type=int, default=1)
     parser.add_argument("--clipped_sampling", help="Use clipped sampling mode.", type=bool, default=False)
     parser.add_argument("--clipping_value", help="Noise clipping value.", type=float, default=1.2)
-    parser.add_argument("--eta", help="Amount of random noise in clipping sampling mode(recommended non-zero values only for not distilled model).", type=float, default=0)
+    parser.add_argument(
+        "--eta",
+        help="Amount of random noise in clipping sampling mode(recommended non-zero values only for not distilled model).",
+        type=float,
+        default=0,
+    )
     return parser
+
 
 def sample_images(args, make_model):
     device = torch.device("cuda")
@@ -40,8 +51,8 @@ def sample_images(args, make_model):
 
     ckpt = torch.load(args.checkpoint)
     teacher.load_state_dict(ckpt["G"])
-    n_timesteps = ckpt["n_timesteps"]//args.time_scale
-    time_scale = ckpt["time_scale"]*args.time_scale
+    n_timesteps = ckpt["n_timesteps"] // args.time_scale
+    time_scale = ckpt["time_scale"] * args.time_scale
     del ckpt
     print("Model loaded.")
 
@@ -49,12 +60,15 @@ def sample_images(args, make_model):
     image_size = deepcopy(teacher.image_size)
     image_size[0] = args.batch_size
 
-    img = make_visualization(teacher_diffusion, device, image_size, need_tqdm=True, eta=args.eta, clip_value=args.clipping_value)
+    img = make_visualization(
+        teacher_diffusion, device, image_size, need_tqdm=True, eta=args.eta, clip_value=args.clipping_value
+    )
     if img.shape[2] == 1:
         img = img[:, :, 0]
     cv2.imwrite(args.out_file, img)
 
     print("Finished.")
+
 
 parser = make_argument_parser()
 
